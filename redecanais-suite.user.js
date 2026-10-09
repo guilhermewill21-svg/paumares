@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RedeCanais Suite - Advanced Player & Channel Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.0.0
-// @description  Suite avançada para RedeCanais TV: captura e validação de URLs de transmissão, troca rápida de canais, modo cinema, PiP, controle de velocidade e bloqueador de anúncios/popups.
+// @version      2.0.2
+// @description  Suite avancada para RedeCanais TV: captura e validacao de URLs de transmissao, troca rapida de canais, modo cinema, PiP, controle de velocidade e bloqueador de anuncios/popups.
 // @author       TCC / College Project
 // @match        *://*.redecanais.*/*
 // @match        *://redecanais.*/*
@@ -447,7 +447,7 @@
                 timeout: 5000,
                 onload: function (response) {
                     if (response.status >= 200 && response.status < 400) {
-                        statusEl.textContent = 'ONLINE ✓';
+                        statusEl.textContent = 'ONLINE \u2713';
                         statusEl.className = 'rc-status-tag valid';
                     } else {
                         statusEl.textContent = 'VERIFICAR URL';
@@ -465,7 +465,7 @@
             });
         } else {
             fetch(url, { method: 'HEAD', mode: 'no-cors' }).then(() => {
-                statusEl.textContent = 'ONLINE ✓';
+                statusEl.textContent = 'ONLINE \u2713';
                 statusEl.className = 'rc-status-tag valid';
             }).catch(() => {
                 statusEl.textContent = 'CAPTURADA';
@@ -504,7 +504,7 @@
     async function togglePiP() {
         const video = getMainVideoElement();
         if (!video) {
-            alert('Nenhum player de vídeo HTML5 diretamente detectado nesta estrutura.');
+            alert('Nenhum player de video HTML5 diretamente detectado nesta estrutura.');
             return;
         }
         try {
@@ -602,7 +602,7 @@
 
         container.innerHTML = RCSuite.recentChannels.map(c => `
             <div class="rc-channel-item" data-url="${c.url}">
-                <span>📺 ${c.name}</span>
+                <span>\u{1F4FA} ${c.name}</span>
                 <span class="rc-badge">Acessar</span>
             </div>
         `).join('');
@@ -634,7 +634,7 @@
             } else {
                 results.innerHTML = matches.map(c => `
                     <div class="rc-channel-item" data-url="${c.url}" data-name="${c.name}">
-                        <span>▶ ${c.name}</span>
+                        <span>\u25B6 ${c.name}</span>
                         <span class="rc-badge">Trocar</span>
                     </div>
                 `).join('');
@@ -662,30 +662,30 @@
         panel.id = 'rc-suite-panel';
         panel.innerHTML = `
             <div class="rc-card-header" id="rc-suite-header">
-                <div class="rc-card-title">📺 RedeCanais Suite</div>
+                <div class="rc-card-title">\u{1F4FA} RedeCanais Suite</div>
                 <div class="rc-card-controls">
-                    <span id="rc-minimize-btn" title="Minimizar / Expandir">—</span>
+                    <span id="rc-minimize-btn" title="Minimizar / Expandir">&#8212;</span>
                 </div>
             </div>
             <div class="rc-card-content">
                 <div>
-                    <div class="rc-section-title">Busca Rápida de Canais</div>
+                    <div class="rc-section-title">BUSCA R&Aacute;PIDA DE CANAIS</div>
                     <input type="text" id="rc-channel-search" class="rc-input-box" placeholder="Ex: HBO, Sportv, Telecine..." />
                     <div id="rc-search-results" class="rc-channel-list" style="display:none; margin-top:6px;"></div>
                 </div>
 
                 <div>
-                    <div class="rc-section-title">Controles do Player</div>
+                    <div class="rc-section-title">CONTROLES DO PLAYER</div>
                     <div class="rc-btn-group">
-                        <button class="rc-btn" id="rc-btn-cinema">🎭 Cinema</button>
-                        <button class="rc-btn" id="rc-btn-pip">📺 PiP</button>
-                        <button class="rc-btn" id="rc-btn-fullscreen">⛶ Fullscreen</button>
+                        <button class="rc-btn" id="rc-btn-cinema">\u{1F3AD} Cinema</button>
+                        <button class="rc-btn" id="rc-btn-pip">\u{1F4FA} PiP</button>
+                        <button class="rc-btn" id="rc-btn-fullscreen">\u2191 Fullscreen</button>
                     </div>
                 </div>
 
                 <div>
                     <div class="rc-speed-control">
-                        <span class="rc-section-title">Velocidade de Reprodução:</span>
+                        <span class="rc-section-title">Velocidade de Reprodu&ccedil;&atilde;o:</span>
                         <span class="rc-speed-val" id="rc-speed-display">${RCSuite.config.playbackSpeed}x</span>
                     </div>
                     <div class="rc-btn-group" style="margin-top: 6px;">
@@ -696,7 +696,7 @@
                 </div>
 
                 <div>
-                    <div class="rc-section-title">Configurações</div>
+                    <div class="rc-section-title">CONFIGURA&Ccedil;&Otilde;ES</div>
                     <div style="display: flex; flex-direction: column; gap: 8px;">
                         <div class="rc-toggle-row">
                             <span>Bloquear Popups & Redirects</span>
@@ -706,7 +706,7 @@
                             </label>
                         </div>
                         <div class="rc-toggle-row">
-                            <span>Remover Anúncios da Tela</span>
+                            <span>Remover An&uacute;ncios da Tela</span>
                             <label class="rc-switch">
                                 <input type="checkbox" id="rc-toggle-ads" ${RCSuite.config.removeAds ? 'checked' : ''}>
                                 <span class="rc-slider"></span>
@@ -723,7 +723,7 @@
                 </div>
 
                 <div>
-                    <div class="rc-section-title">URL de Transmissão Detectada</div>
+                    <div class="rc-section-title">URL DE TRANSMISS&Atilde;O DETECTADA</div>
                     <div class="rc-captured-box">
                         <span id="rc-stream-status" class="rc-status-tag checking">AGUARDANDO...</span>
                         <div class="rc-captured-url" id="rc-stream-url">Nenhuma URL capturada ainda.</div>
@@ -731,7 +731,7 @@
                 </div>
 
                 <div>
-                    <div class="rc-section-title">Últimos Canais Assistidos</div>
+                    <div class="rc-section-title">&Uacute;LTIMOS CANAIS ASSISTIDOS</div>
                     <div class="rc-channel-list" id="rc-recent-list"></div>
                 </div>
             </div>
