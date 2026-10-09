@@ -402,7 +402,9 @@
         adSelectors.forEach(selector => {
             document.querySelectorAll(selector).forEach(el => {
                 // Ensure we don't accidentally remove main player or suite UI
-                if (!el.closest('#rc-suite-panel') && !el.getAttribute('name')?.includes('Player')) {
+                const nameAttr = el.getAttribute('name');
+                const isPlayerIframe = nameAttr && nameAttr.indexOf('Player') !== -1;
+                if (!el.closest('#rc-suite-panel') && !isPlayerIframe) {
                     el.style.display = 'none';
                     el.remove();
                 }
