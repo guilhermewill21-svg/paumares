@@ -4,10 +4,11 @@
 // @version      2.0.2
 // @description  Suite avancada para RedeCanais TV: captura e validacao de URLs de transmissao, troca rapida de canais, modo cinema, PiP, controle de velocidade e bloqueador de anuncios/popups.
 // @author       TCC / College Project
-// @match        *://*.redecanais.*/*
-// @match        *://redecanais.*/*
-// @match        *://*.redecanaistv.*/*
-// @match        *://redecanaistv.*/*
+// @match        http://*.redecanaistv.ae/*
+// @match        https://*.redecanaistv.ae/*
+// @match        http://redecanaistv.ae/*
+// @match        https://redecanaistv.ae/*
+// @include      *://*redecanais*/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=redecanaistv.ae
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -602,7 +603,7 @@
 
         container.innerHTML = RCSuite.recentChannels.map(c => `
             <div class="rc-channel-item" data-url="${c.url}">
-                <span>\u{1F4FA} ${c.name}</span>
+                <span>\uD83D\uDCFA ${c.name}</span>
                 <span class="rc-badge">Acessar</span>
             </div>
         `).join('');
@@ -662,7 +663,7 @@
         panel.id = 'rc-suite-panel';
         panel.innerHTML = `
             <div class="rc-card-header" id="rc-suite-header">
-                <div class="rc-card-title">\u{1F4FA} RedeCanais Suite</div>
+                <div class="rc-card-title">\uD83D\uDCFA RedeCanais Suite</div>
                 <div class="rc-card-controls">
                     <span id="rc-minimize-btn" title="Minimizar / Expandir">&#8212;</span>
                 </div>
@@ -677,8 +678,8 @@
                 <div>
                     <div class="rc-section-title">CONTROLES DO PLAYER</div>
                     <div class="rc-btn-group">
-                        <button class="rc-btn" id="rc-btn-cinema">\u{1F3AD} Cinema</button>
-                        <button class="rc-btn" id="rc-btn-pip">\u{1F4FA} PiP</button>
+                        <button class="rc-btn" id="rc-btn-cinema">\uD83C\uDFAD Cinema</button>
+                        <button class="rc-btn" id="rc-btn-pip">\uD83D\uDCFA PiP</button>
                         <button class="rc-btn" id="rc-btn-fullscreen">\u2191 Fullscreen</button>
                     </div>
                 </div>
