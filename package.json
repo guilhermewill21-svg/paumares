@@ -1,4 +1,11 @@
 {
+  "name": "redecanais-suite",
+  "version": "2.0.2",
+  "description": "Suite avançada para RedeCanais TV - Projeto TCC",
+  "main": "redecanais-suite.user.js",
+  "scripts": {
+    "test": "node test/verify_script.js"
+  },
   "dependencies": {
     "jsdom": "^29.1.1"
   }

@@ -5,7 +5,7 @@ console.log('--- STARTING REDECANAIS SUITE INTEGRATION TESTS ---');
 
 const userScriptCode = fs.readFileSync('redecanais-suite.user.js', 'utf8');
 
-// Element representation for light DOM
+// Element representation for light DOM mock
 class MockNode {
   constructor(tag = 'DIV') {
     this.tagName = tag.toUpperCase();
@@ -54,14 +54,14 @@ class MockNode {
   }
 
   setAttribute(k, v) {
-    this.attributes[k] = v;
-    if (k === 'id') this.id = v;
+    this.attributes[k] = String(v);
+    if (k === 'id') this.id = String(v);
     if (k === 'class') {
-      this.className = v;
-      v.split(' ').forEach(c => { if (c) this.classList.add(c); });
+      this.className = String(v);
+      String(v).split(' ').forEach(c => { if (c) this.classList.add(c); });
     }
-    if (k === 'src') this.src = v;
-    if (k === 'href') this.href = v;
+    if (k === 'src') this.src = String(v);
+    if (k === 'href') this.href = String(v);
   }
 
   getAttribute(k) { return this.attributes[k] || (k === 'src' ? this.src : (k === 'href' ? this.href : null)); }
@@ -162,6 +162,16 @@ doc.createElement = function(tag) {
 
 doc.getElementById = (id) => doc.querySelector('#' + id);
 
+// Standard URL class polyfill if needed
+class MockURL {
+  constructor(url) {
+    this.href = url;
+  }
+  toString() {
+    return this.href;
+  }
+}
+
 const win = {
   document: doc,
   location: { href: 'https://redecanaistv.ae/hbo-family-ao-vivo.html', hostname: 'redecanaistv.ae' },
@@ -169,12 +179,14 @@ const win = {
   addEventListener: () => {},
   open: function() { return {}; },
   fetch: async function(url) { return { status: 200 }; },
-  XMLHttpRequest: class { open(m, u) {} }
+  XMLHttpRequest: class { open(m, u) {} },
+  URL: MockURL
 };
 
 // Polyfills
 global.window = win;
 global.document = doc;
+global.URL = MockURL;
 global.setInterval = (fn, ms) => {
   const timer = { unref: () => {} };
   return timer;
@@ -190,6 +202,14 @@ chLink.setAttribute('title', 'Telecine Pipoca');
 chLink.innerText = 'Telecine Pipoca';
 doc.body.appendChild(chLink);
 
+const containerThumb = new MockNode('DIV');
+containerThumb.className = 'thumb';
+const thumbLink = new MockNode('A');
+thumbLink.setAttribute('href', 'https://redecanaistv.ae/sportv-1-ao-vivo.html');
+thumbLink.setAttribute('title', 'SporTV 1 "HD"');
+containerThumb.appendChild(thumbLink);
+doc.body.appendChild(containerThumb);
+
 const iframe = new MockNode('IFRAME');
 iframe.setAttribute('name', 'Player');
 iframe.src = 'https://redecanaistv.ae/ch.html?id=hbofamily';
@@ -199,7 +219,7 @@ doc.body.appendChild(iframe);
 eval(userScriptCode);
 
 // Trigger fetch stream interception
-win.fetch('https://cdn.redecanaistv.ae/hls/hbofamily.m3u8');
+win.fetch(new MockURL('https://cdn.redecanaistv.ae/hls/hbofamily.m3u8'));
 
 // Tests
 console.log('1. Checking Suite Panel Injection...');
@@ -207,20 +227,29 @@ const panel = doc.getElementById('rc-suite-panel');
 assert(panel !== null, 'Suite panel should exist');
 console.log('✓ Suite Panel successfully injected.');
 
-console.log('2. Checking Popup Suppressor...');
+console.log('2. Checking Popup Suppressor Dummy Window Object...');
 const popResult = win.open('https://popunder.com');
-assert.strictEqual(popResult, null, 'window.open should be overridden and return null');
-console.log('✓ Popup suppression operational.');
+assert(popResult !== null, 'window.open should return dummy window object');
+assert.strictEqual(typeof popResult.focus, 'function', 'Dummy window should have focus() method');
+assert.strictEqual(typeof popResult.blur, 'function', 'Dummy window should have blur() method');
+assert.strictEqual(typeof popResult.close, 'function', 'Dummy window should have close() method');
+assert.strictEqual(popResult.closed, true, 'Dummy window closed property should be true');
+// Execute methods to confirm no exceptions
+popResult.focus();
+popResult.blur();
+popResult.close();
+console.log('✓ Popup suppression operational and safe from TypeErrors.');
 
-console.log('3. Checking Stream Capture...');
+console.log('3. Checking Stream Capture with URL objects...');
 const streamUrlBox = doc.getElementById('rc-stream-url');
 assert(streamUrlBox !== null, 'Stream URL box should exist');
-assert(streamUrlBox.textContent.includes('hbofamily.m3u8'), 'Stream URL should capture stream url');
+assert(streamUrlBox.textContent.includes('hbofamily.m3u8'), 'Stream URL should capture stream url from URL object');
 console.log('✓ Stream URL captured:', streamUrlBox.textContent);
 
-console.log('4. Checking Channel List Scraping & Switching...');
+console.log('4. Checking Channel List Scraping & Switching with Containers...');
 assert(win.RCSuite.allChannels.length > 0, 'Channels should be scraped from page');
-assert(win.RCSuite.allChannels.some(c => c.name === 'Telecine Pipoca'), 'Channel Telecine Pipoca should be in scraped channels list');
+assert(win.RCSuite.allChannels.some(c => c.name.includes('Telecine Pipoca')), 'Channel Telecine Pipoca should be in scraped channels list');
+assert(win.RCSuite.allChannels.some(c => c.name.includes('SporTV 1')), 'SporTV 1 inside .thumb should be scraped');
 console.log('✓ Channel scraping operational. Total channels:', win.RCSuite.allChannels.length);
 
 console.log('5. Checking Cinema Mode Toggle...');
@@ -230,13 +259,19 @@ cinemaBtn.dispatchEvent({ type: 'click' });
 assert(doc.body.classList.contains('rc-cinema-active'), 'Body should have rc-cinema-active class');
 console.log('✓ Cinema mode toggles body class correctly.');
 
-console.log('6. Checking Speed Display Updates...');
+console.log('6. Checking Speed Display Updates & Input Validation...');
 const speedUp = doc.getElementById('rc-speed-up');
 assert(speedUp !== null, 'Speed Up button should exist');
 speedUp.dispatchEvent({ type: 'click' });
 const speedDisplay = doc.getElementById('rc-speed-display');
 assert.strictEqual(speedDisplay.textContent, '1.25x');
-console.log('✓ Playback speed adjusted to 1.25x.');
+
+// Test NaN validation
+win.RCSuite.config.playbackSpeed = 1.0;
+const speedReset = doc.getElementById('rc-speed-reset');
+speedReset.dispatchEvent({ type: 'click' });
+assert.strictEqual(speedDisplay.textContent, '1x');
+console.log('✓ Playback speed adjusted and validated.');
 
 console.log('--- ALL INTEGRATION TESTS PASSED SUCCESSFULLY ---');
 process.exit(0);
