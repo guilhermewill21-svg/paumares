@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RedeCanais Suite - Advanced Player & Channel Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.0.2
+// @version      2.0.3
 // @description  Suite avancada para RedeCanais TV: captura e validacao de URLs de transmissao, troca rapida de canais, modo cinema, PiP, controle de velocidade e bloqueador de anuncios/popups.
 // @author       TCC / College Project
 // @match        http://*.redecanaistv.ae/*
@@ -370,7 +370,8 @@
             while (target && target !== document) {
                 if (target.tagName === 'A') {
                     const href = target.getAttribute('href') || '';
-                    if (target.target === '_blank' && (href.includes('ads') || href.includes('pop') || href.startsWith('http') && !href.includes(window.location.hostname))) {
+                    const targetAttr = (target.target || '').toLowerCase();
+                    if (targetAttr === '_blank' && (href.includes('ads') || href.includes('pop') || (href.startsWith('http') && !href.includes(window.location.hostname)))) {
                         e.preventDefault();
                         e.stopPropagation();
                         console.log('[RC Suite] Redirecionamento/Ad Link bloqueado:', href);
@@ -554,44 +555,52 @@
 
     // Monitor Video Elements & Iframes
     function scanMediaElements() {
-        removeScreenAds();
-        applyAutoPlay();
+        try {
+            removeScreenAds();
+            applyAutoPlay();
 
-        document.querySelectorAll('video').forEach(video => {
-            video.playbackRate = RCSuite.config.playbackSpeed;
-            if (video.src && isStreamUrl(video.src)) {
-                validateStreamUrl(video.src);
-            }
-            video.querySelectorAll('source').forEach(src => {
-                if (src.src && isStreamUrl(src.src)) {
-                    validateStreamUrl(src.src);
+            document.querySelectorAll('video').forEach(video => {
+                video.playbackRate = RCSuite.config.playbackSpeed;
+                if (video.src && isStreamUrl(video.src)) {
+                    validateStreamUrl(video.src);
+                }
+                video.querySelectorAll('source').forEach(src => {
+                    if (src.src && isStreamUrl(src.src)) {
+                        validateStreamUrl(src.src);
+                    }
+                });
+            });
+
+            document.querySelectorAll('iframe').forEach(iframe => {
+                if (iframe.src && (iframe.src.includes('ch.html') || iframe.src.includes('player'))) {
+                    if (!RCSuite.capturedStreamUrl) {
+                        validateStreamUrl(iframe.src);
+                    }
                 }
             });
-        });
-
-        document.querySelectorAll('iframe').forEach(iframe => {
-            if (iframe.src && (iframe.src.includes('ch.html') || iframe.src.includes('player'))) {
-                if (!RCSuite.capturedStreamUrl) {
-                    validateStreamUrl(iframe.src);
-                }
-            }
-        });
+        } catch (err) {
+            console.error('[RC Suite] Error scanning media elements:', err);
+        }
     }
 
     // Channel Scraping & Filtering
     function scrapePageChannels() {
-        const channels = [];
-        const links = document.querySelectorAll('a[href*="-ao-vivo"], a[href*="assistir-"], .canal-item, .thumb');
+        try {
+            const channels = [];
+            const links = document.querySelectorAll('a[href*="-ao-vivo"], a[href*="assistir-"], .canal-item, .thumb');
 
-        links.forEach(link => {
-            const title = (link.getAttribute('title') || link.innerText || link.getAttribute('alt') || '').trim();
-            const href = link.href;
-            if (title && href && title.length > 2 && !channels.some(c => c.url === href)) {
-                channels.push({ name: title, url: href });
-            }
-        });
+            links.forEach(link => {
+                const title = (link.getAttribute('title') || link.innerText || link.getAttribute('alt') || '').trim();
+                const href = link.href;
+                if (title && href && title.length > 2 && !channels.some(c => c.url === href)) {
+                    channels.push({ name: title, url: href });
+                }
+            });
 
-        RCSuite.allChannels = channels;
+            RCSuite.allChannels = channels;
+        } catch (err) {
+            console.error('[RC Suite] Error scraping page channels:', err);
+        }
     }
 
     function renderRecentChannels() {
