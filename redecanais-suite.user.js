@@ -2,7 +2,7 @@
 // @name         RedeCanais Suite - Advanced Player & Channel Manager
 // @namespace    http://tampermonkey.net/
 // @version      2.0.2
-// @description  Suite avancada para RedeCanais TV: captura e validacao de URLs de transmissao, troca rapida de canais, modo cinema, PiP, controle de velocidade e bloqueador de anuncios/popups.
+// @description  Suite avançada para RedeCanais TV: captura e validação de URLs de transmissão, troca rápida de canais, modo cinema, PiP, controle de velocidade e bloqueador de anúncios/popups.
 // @author       TCC / College Project
 // @match        http://*.redecanaistv.ae/*
 // @match        https://*.redecanaistv.ae/*
@@ -19,6 +19,32 @@
 
 (function () {
     'use strict';
+
+    /**
+     * Auxiliar para sanitizar strings para inserção segura em HTML (Prevenção de DOM XSS)
+     */
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    /**
+     * Auxiliar para sanitizar strings para uso em atributos HTML
+     */
+    function escapeAttr(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
 
     // UI Styles matching reference design
     const STYLES = `
@@ -295,7 +321,7 @@
         }
     `;
 
-    // Inject CSS
+    // Inject CSS into DOM
     if (typeof GM_addStyle !== 'undefined') {
         GM_addStyle(STYLES);
     } else {
@@ -304,7 +330,7 @@
         (document.head || document.documentElement).appendChild(styleEl);
     }
 
-    // Helper functions for storage
+    // Helper functions for storage with fallback to localStorage
     function getStoredVal(key, defaultVal) {
         if (typeof GM_getValue !== 'undefined') {
             return GM_getValue(key, defaultVal);
@@ -327,7 +353,7 @@
         }
     }
 
-    // State Management
+    // State Management Object
     const RCSuite = {
         config: {
             blockPopups: getStoredVal('blockPopups', true),
@@ -358,9 +384,17 @@
 
     // POPUP & REDIRECT SUPPRESSION
     function enablePopupBlocking() {
+        // Safe mock for window.open returning a dummy window object with no-op methods
+        // Prevents TypeError in host scripts calling .focus(), .blur(), .close(), etc.
         window.open = function () {
-            console.log('[RC Suite] Popup/Window.open bloqueado.');
-            return null;
+            console.log('[RC Suite] Popup/Window.open bloqueado com mock seguro.');
+            return {
+                focus: function () {},
+                blur: function () {},
+                close: function () {},
+                postMessage: function () {},
+                closed: true
+            };
         };
 
         // Suppress target="_blank" onclick redirect hijacking
@@ -370,7 +404,7 @@
             while (target && target !== document) {
                 if (target.tagName === 'A') {
                     const href = target.getAttribute('href') || '';
-                    if (target.target === '_blank' && (href.includes('ads') || href.includes('pop') || href.startsWith('http') && !href.includes(window.location.hostname))) {
+                    if (target.target === '_blank' && (href.includes('ads') || href.includes('pop') || (href.startsWith('http') && !href.includes(window.location.hostname)))) {
                         e.preventDefault();
                         e.stopPropagation();
                         console.log('[RC Suite] Redirecionamento/Ad Link bloqueado:', href);
@@ -420,24 +454,28 @@
 
     // Stream Interception Logic
     function isStreamUrl(url) {
-        if (!url || typeof url !== 'string') return false;
+        if (!url) return false;
+        const urlStr = (typeof url === 'string') ? url : (url.href || String(url));
         return (
-            url.includes('.m3u8') ||
-            url.includes('.mp4') ||
-            url.includes('stream') ||
-            url.includes('/hls/') ||
-            url.includes('cdn') ||
-            url.includes('ch.html')
+            urlStr.includes('.m3u8') ||
+            urlStr.includes('.mp4') ||
+            urlStr.includes('stream') ||
+            urlStr.includes('/hls/') ||
+            urlStr.includes('cdn') ||
+            urlStr.includes('ch.html')
         );
     }
 
     function validateStreamUrl(url) {
+        if (!url) return;
+        const urlStr = (typeof url === 'string') ? url : (url.href || String(url));
+        RCSuite.capturedStreamUrl = urlStr;
+
         const urlEl = document.getElementById('rc-stream-url');
         const statusEl = document.getElementById('rc-stream-status');
         if (!urlEl || !statusEl) return;
 
-        RCSuite.capturedStreamUrl = url;
-        urlEl.textContent = url;
+        urlEl.textContent = urlStr;
         statusEl.textContent = 'VALIDANDO...';
         statusEl.className = 'rc-status-tag checking';
 
@@ -446,7 +484,7 @@
         if (checkRequest) {
             checkRequest({
                 method: 'HEAD',
-                url: url,
+                url: urlStr,
                 timeout: 5000,
                 onload: function (response) {
                     if (response.status >= 200 && response.status < 400) {
@@ -467,7 +505,7 @@
                 }
             });
         } else {
-            fetch(url, { method: 'HEAD', mode: 'no-cors' }).then(() => {
+            fetch(urlStr, { method: 'HEAD', mode: 'no-cors' }).then(() => {
                 statusEl.textContent = 'ONLINE \u2713';
                 statusEl.className = 'rc-status-tag valid';
             }).catch(() => {
@@ -477,10 +515,21 @@
         }
     }
 
-    // Intercept fetch & XHR
+    // Intercept fetch & XHR safely supporting strings, URL instances, and Request objects
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {
-        const url = args[0] ? (typeof args[0] === 'string' ? args[0] : args[0].url) : '';
+        let url = '';
+        if (args[0]) {
+            if (typeof args[0] === 'string') {
+                url = args[0];
+            } else if (typeof URL !== 'undefined' && args[0] instanceof URL) {
+                url = args[0].href;
+            } else if (args[0].url) {
+                url = args[0].url;
+            } else {
+                url = String(args[0]);
+            }
+        }
         if (isStreamUrl(url)) {
             validateStreamUrl(url);
         }
@@ -489,8 +538,12 @@
 
     const originalXHR = window.XMLHttpRequest.prototype.open;
     window.XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-        if (isStreamUrl(url)) {
-            validateStreamUrl(url);
+        let urlStr = '';
+        if (url) {
+            urlStr = (typeof url === 'string') ? url : (url.href || String(url));
+        }
+        if (isStreamUrl(urlStr)) {
+            validateStreamUrl(urlStr);
         }
         return originalXHR.apply(this, [method, url, ...rest]);
     };
@@ -507,7 +560,7 @@
     async function togglePiP() {
         const video = getMainVideoElement();
         if (!video) {
-            alert('Nenhum player de video HTML5 diretamente detectado nesta estrutura.');
+            alert('Nenhum player de vídeo HTML5 diretamente detectado nesta estrutura.');
             return;
         }
         try {
@@ -532,14 +585,16 @@
     }
 
     function setPlaybackSpeed(speed) {
-        speed = Math.max(0.25, Math.min(3.0, parseFloat(speed.toFixed(2))));
-        RCSuite.saveConfig('playbackSpeed', speed);
+        let numSpeed = parseFloat(speed);
+        if (isNaN(numSpeed)) numSpeed = 1.0;
+        numSpeed = Math.max(0.25, Math.min(3.0, parseFloat(numSpeed.toFixed(2))));
+        RCSuite.saveConfig('playbackSpeed', numSpeed);
 
         const display = document.getElementById('rc-speed-display');
-        if (display) display.textContent = `${speed}x`;
+        if (display) display.textContent = `${numSpeed}x`;
 
         document.querySelectorAll('video').forEach(v => {
-            v.playbackRate = speed;
+            v.playbackRate = numSpeed;
         });
     }
 
@@ -578,14 +633,32 @@
         });
     }
 
-    // Channel Scraping & Filtering
+    // Robust Channel Scraping & Filtering
     function scrapePageChannels() {
         const channels = [];
-        const links = document.querySelectorAll('a[href*="-ao-vivo"], a[href*="assistir-"], .canal-item, .thumb');
+        const selector = 'a[href*="-ao-vivo"], a[href*="assistir-"], .canal-item, .thumb';
+        const elements = document.querySelectorAll(selector);
 
-        links.forEach(link => {
-            const title = (link.getAttribute('title') || link.innerText || link.getAttribute('alt') || '').trim();
-            const href = link.href;
+        elements.forEach(el => {
+            let href = el.href || el.getAttribute('href') || el.getAttribute('data-url');
+            let anchor = null;
+            if (!href && el.querySelector) {
+                anchor = el.querySelector('a');
+                if (anchor) href = anchor.href || anchor.getAttribute('href');
+            }
+
+            if (!href) return;
+
+            let title = el.getAttribute('title') || el.innerText || el.getAttribute('alt');
+            if (!title && anchor) {
+                title = anchor.getAttribute('title') || anchor.innerText;
+            }
+            if (!title && el.querySelector) {
+                const img = el.querySelector('img');
+                if (img) title = img.getAttribute('alt') || img.getAttribute('title');
+            }
+            title = (title || '').trim();
+
             if (title && href && title.length > 2 && !channels.some(c => c.url === href)) {
                 channels.push({ name: title, url: href });
             }
@@ -604,8 +677,8 @@
         }
 
         container.innerHTML = RCSuite.recentChannels.map(c => `
-            <div class="rc-channel-item" data-url="${c.url}">
-                <span>\uD83D\uDCFA ${c.name}</span>
+            <div class="rc-channel-item" data-url="${escapeAttr(c.url)}">
+                <span>\uD83D\uDCFA ${escapeHtml(c.name)}</span>
                 <span class="rc-badge">Acessar</span>
             </div>
         `).join('');
@@ -636,8 +709,8 @@
                 results.innerHTML = `<div style="color: #718096; padding: 6px; font-size: 11px;">Nenhum canal encontrado.</div>`;
             } else {
                 results.innerHTML = matches.map(c => `
-                    <div class="rc-channel-item" data-url="${c.url}" data-name="${c.name}">
-                        <span>\u25B6 ${c.name}</span>
+                    <div class="rc-channel-item" data-url="${escapeAttr(c.url)}" data-name="${escapeAttr(c.name)}">
+                        <span>\u25B6 ${escapeHtml(c.name)}</span>
                         <span class="rc-badge">Trocar</span>
                     </div>
                 `).join('');
@@ -753,6 +826,11 @@
         setupSearch();
         renderRecentChannels();
 
+        // Check pre-captured stream URL on UI initialization
+        if (RCSuite.capturedStreamUrl) {
+            validateStreamUrl(RCSuite.capturedStreamUrl);
+        }
+
         // Check page title for channel registration
         const pageTitle = document.title.split('-')[0].trim();
         if (pageTitle && pageTitle.length > 2 && window.location.href.includes('-ao-vivo')) {
@@ -762,8 +840,9 @@
         setInterval(scanMediaElements, 2000);
     }
 
-    // Draggable utility
+    // Draggable utility with safety checks
     function makeDraggable(elmnt, handle) {
+        if (!elmnt || !handle) return;
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
         handle.onmousedown = dragMouseDown;
 
@@ -784,8 +863,8 @@
             pos2 = pos4 - e.clientY;
             pos3 = e.clientX;
             pos4 = e.clientY;
-            elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-            elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+            elmnt.style.top = Math.max(0, (elmnt.offsetTop - pos2)) + "px";
+            elmnt.style.left = Math.max(0, (elmnt.offsetLeft - pos1)) + "px";
             elmnt.style.right = 'auto';
         }
 
@@ -797,36 +876,52 @@
 
     function setupUIEvents() {
         const panel = document.getElementById('rc-suite-panel');
-        document.getElementById('rc-minimize-btn').addEventListener('click', () => {
-            panel.classList.toggle('rc-minimized');
-        });
+        const minBtn = document.getElementById('rc-minimize-btn');
+        if (minBtn && panel) {
+            minBtn.addEventListener('click', () => {
+                panel.classList.toggle('rc-minimized');
+            });
+        }
 
         // Player buttons
-        document.getElementById('rc-btn-cinema').addEventListener('click', toggleCinemaMode);
-        document.getElementById('rc-btn-pip').addEventListener('click', togglePiP);
-        document.getElementById('rc-btn-fullscreen').addEventListener('click', toggleFullscreen);
+        const cinemaBtn = document.getElementById('rc-btn-cinema');
+        if (cinemaBtn) cinemaBtn.addEventListener('click', toggleCinemaMode);
+
+        const pipBtn = document.getElementById('rc-btn-pip');
+        if (pipBtn) pipBtn.addEventListener('click', togglePiP);
+
+        const fsBtn = document.getElementById('rc-btn-fullscreen');
+        if (fsBtn) fsBtn.addEventListener('click', toggleFullscreen);
 
         // Speed buttons
-        document.getElementById('rc-speed-down').addEventListener('click', () => {
+        const speedDown = document.getElementById('rc-speed-down');
+        if (speedDown) speedDown.addEventListener('click', () => {
             setPlaybackSpeed(RCSuite.config.playbackSpeed - 0.25);
         });
-        document.getElementById('rc-speed-reset').addEventListener('click', () => {
+
+        const speedReset = document.getElementById('rc-speed-reset');
+        if (speedReset) speedReset.addEventListener('click', () => {
             setPlaybackSpeed(1.0);
         });
-        document.getElementById('rc-speed-up').addEventListener('click', () => {
+
+        const speedUp = document.getElementById('rc-speed-up');
+        if (speedUp) speedUp.addEventListener('click', () => {
             setPlaybackSpeed(RCSuite.config.playbackSpeed + 0.25);
         });
 
         // Config toggles
-        document.getElementById('rc-toggle-popups').addEventListener('change', (e) => {
+        const togglePopups = document.getElementById('rc-toggle-popups');
+        if (togglePopups) togglePopups.addEventListener('change', (e) => {
             RCSuite.saveConfig('blockPopups', e.target.checked);
         });
 
-        document.getElementById('rc-toggle-ads').addEventListener('change', (e) => {
+        const toggleAds = document.getElementById('rc-toggle-ads');
+        if (toggleAds) toggleAds.addEventListener('change', (e) => {
             RCSuite.saveConfig('removeAds', e.target.checked);
         });
 
-        document.getElementById('rc-toggle-autoplay').addEventListener('change', (e) => {
+        const toggleAutoplay = document.getElementById('rc-toggle-autoplay');
+        if (toggleAutoplay) toggleAutoplay.addEventListener('change', (e) => {
             RCSuite.saveConfig('autoPlay', e.target.checked);
         });
     }
